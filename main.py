@@ -1,134 +1,53 @@
 import os
-import sys
-import json
 import asyncio
 import logging
-from logging.handlers import RotatingFileHandler
 import google.generativeai as genai
 from fbchat import Client
 from fbchat.models import Message, ThreadType
 
-# ==============================================================================
-# 1. HỆ THỐNG GHI NHẬT KÝ (LOGGING)
-# ==============================================================================
-log_formatter = logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s')
-logger = logging.getLogger("KenyukoGeminiBot")
-logger.setLevel(logging.INFO)
+# Cấu hình logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logger = logging.getLogger("KenyukoBot")
 
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(log_formatter)
-logger.addHandler(console_handler)
-
-file_handler = RotatingFileHandler('bot_system.log', maxBytes=5*1024*1024, backupCount=2, encoding='utf-8')
-file_handler.setFormatter(log_formatter)
-logger.addHandler(file_handler)
-
-# ==============================================================================
-# 2. CẤU HÌNH API GEMINI
-# ==============================================================================
-GEMINI_API_KEY = "AIzaSyAgoGWtjz6WAvvnjNK20AzX7NvoJXyU4tw"
-genai.configure(api_key=GEMINI_API_KEY)
+# Cấu hình Gemini
+genai.configure(api_key="AIzaSyAgoGWtjz6WAvvnjNK20AzX7NvoJXyU4tw")
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# ==============================================================================
-# 3. QUẢN LÝ CẤU HÌNH (CONFIG MANAGER)
-# ==============================================================================
-CONFIG_FILE = "bot_config.json"
+# THÔNG TIN ĐÃ NHÚNG SẴN (KHÔNG CẦN NHẬP LẠI)
+MY_PROMPT = "Bạn là 1 wibu chính hiệu, nói chuyện cực kì cute, hay dùng các từ như uwu, owo, nhe, ne, nha, xưng hô là em - anh/bạn."
+COOKIES = [
+    {"key": "datr", "value": "Qo0RamV9_izHd8CF7L_XtF4b", "domain": "facebook.com", "path": "/"},
+    {"key": "c_user", "value": "61561912502451", "domain": "facebook.com", "path": "/"},
+    {"key": "xs", "value": "7%3AG1PWw91GK4Ev3Q%3A2%3A1779613393%3A-1%3A-1%3A%3AAcxPlAnijzXDR_oG3OYBOIgwPIwS85aWhdpBC72AsA", "domain": "facebook.com", "path": "/"},
+    {"key": "fr", "value": "1HXVXlkEjG15GKqU2.AWcf0iNfcM4wwqccQgd37yGsP360hzqIh657cpb7c90CZ74tPf4.BqEr7X..AAA.0.0.BqEsFv.AWe2_Y5Hv28__W8AKRccMkltHRM", "domain": "facebook.com", "path": "/"}
+]
 
-def load_config():
-    default = {
-        "systemPrompt": "Bạn là một AI thông minh, hãy trả lời ngắn gọn, thân thiện và lịch sự bằng tiếng Việt.",
-        "appState": "",
-        "conversationHistory": {}
-    }
-    if not os.path.exists(CONFIG_FILE):
-        return default
-    try:
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return default
-
-config = load_config()
-
-def save_config():
-    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(config, f, ensure_ascii=False, indent=4)
-
-# ==============================================================================
-# 4. LÕI AI GEMINI
-# ==============================================================================
-async def get_ai_response(thread_id, user_message):
-    try:
-        chat = model.start_chat(history=[])
-        full_prompt = f"{config['systemPrompt']}\n\nNgười dùng: {user_message}"
-        response = await asyncio.to_thread(chat.send_message, full_prompt)
-        return response.text
-    except Exception as e:
-        logger.error(f"Lỗi AI: {e}")
-        return "Xin lỗi, mình đang gặp sự cố kết nối AI."
-
-# ==============================================================================
-# 5. LÕI BOT FACEBOOK
-# ==============================================================================
-class RobustFacebookBot(Client):
+class Bot(Client):
     async def on_message(self, author_id=None, message_object=None, thread_id=None, thread_type=ThreadType.USER, **kwargs):
-        if author_id == self.uid or not message_object.text:
-            return
+        if author_id == self.uid or not message_object.text: return
         
-        logger.info(f"Nhận tin từ {author_id}: {message_object.text}")
         try:
-            await self.set_typing_status(True, thread_id=thread_id, thread_type=thread_type)
-            reply = await get_ai_response(thread_id, message_object.text)
-            await self.send(Message(text=reply), thread_id=thread_id, thread_type=thread_type)
+            # Gửi tin nhắn đến Gemini
+            chat = model.start_chat(history=[])
+            response = await asyncio.to_thread(chat.send_message, f"{MY_PROMPT}\n\nNgười dùng: {message_object.text}")
+            
+            # Phản hồi lại Facebook
+            await self.send(Message(text=response.text), thread_id=thread_id, thread_type=thread_type)
+            logger.info(f"Đã trả lời: {response.text[:20]}...")
         except Exception as e:
-            logger.error(f"Lỗi gửi tin: {e}")
-        finally:
-            await self.set_typing_status(False, thread_id=thread_id, thread_type=thread_type)
-
-# ==============================================================================
-# 6. MENU ĐIỀU KHIỂN
-# ==============================================================================
-async def run_bot():
-    if not config["appState"]:
-        print("LỖI: AppState trống! Hãy chọn [2] để nhập.")
-        return
-    try:
-        cookies = json.loads(config["appState"])
-        bot = RobustFacebookBot()
-        await bot.start_listing_with_cookies(cookies)
-        print("Bot đang chạy... (Nhấn Ctrl+C để dừng)")
-        await bot.listen()
-    except Exception as e:
-        print(f"Lỗi đăng nhập: {e}")
+            logger.error(f"Lỗi AI: {e}")
 
 async def main():
-    while True:
-        print("\n=== KENYUKO BOT MENU ===")
-        print("[1] Cài Prompt AI")
-        print("[2] Nhập AppState (Dán chuỗi cookie vào đây)")
-        print("[3] Chạy Bot")
-        print("[4] Thoát")
-        choice = input("Chọn: ")
-        
-        if choice == '1':
-            config["systemPrompt"] = input("Nhập Prompt mới: ")
-            save_config()
-        elif choice == '2':
-            # Nhận chuỗi từ người dùng và kiểm tra ngay
-            raw_cookie = input("Dán toàn bộ chuỗi AppState (từ [ đến ]): ").strip()
-            try:
-                json.loads(raw_cookie) # Kiểm tra định dạng JSON
-                config["appState"] = raw_cookie
-                save_config()
-                print("Lưu AppState thành công!")
-            except:
-                print("LỖI: Chuỗi bạn dán không phải là định dạng JSON hợp lệ.")
-        elif choice == '3':
-            await run_bot()
-            break
-        elif choice == '4':
-            sys.exit()
+    print("--- KENYUKO BOT WIBU ĐANG KHỞI ĐỘNG ---")
+    try:
+        bot = Bot()
+        await bot.start_listing_with_cookies(COOKIES)
+        print("Bot đã kết nối thành công! Đang lắng nghe tin nhắn...")
+        await bot.listen()
+    except Exception as e:
+        print(f"Lỗi kết nối: {e}")
+        print("Có vẻ Cookie đã hết hạn hoặc bị thay đổi, hãy lấy lại cookie mới.")
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
