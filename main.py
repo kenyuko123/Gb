@@ -9,11 +9,12 @@ from fbchat.models import Message, ThreadType
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger("KenyukoBot")
 
-# Cấu hình Gemini
-genai.configure(api_key="AIzaSyAgoGWtjz6WAvvnjNK20AzX7NvoJXyU4tw")
+# CẤU HÌNH API GEMINI - ĐÃ NHẬP SẴN
+GEMINI_API_KEY = "AIzaSyAgoGWtjz6WAvvnjNK20AzX7NvoJXyU4tw"
+genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# THÔNG TIN ĐÃ NHÚNG SẴN (KHÔNG CẦN NHẬP LẠI)
+# THÔNG TIN ĐÃ NHÚNG SẴN
 MY_PROMPT = "Bạn là 1 wibu chính hiệu, nói chuyện cực kì cute, hay dùng các từ như uwu, owo, nhe, ne, nha, xưng hô là em - anh/bạn."
 COOKIES = [
     {"key": "datr", "value": "Qo0RamV9_izHd8CF7L_XtF4b", "domain": "facebook.com", "path": "/"},
